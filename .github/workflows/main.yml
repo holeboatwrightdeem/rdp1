@@ -115,6 +115,46 @@ jobs:
 
           Write-Host 'OpenCode Desktop installed successfully.'
 
+          # --- Найти установленный exe ---
+          $possiblePaths = @(
+              "$env:ProgramFiles\OpenCode\OpenCode.exe",
+              "${env:ProgramFiles(x86)}\OpenCode\OpenCode.exe",
+              "$env:LocalAppData\Programs\OpenCode\OpenCode.exe"
+          )
+
+          $targetExe = $possiblePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $targetExe) {
+              # Если путь не угадан — ищем по всей системе
+              $found = Get-ChildItem -Path "$env:ProgramFiles","${env:ProgramFiles(x86)}" `
+                  -Filter 'OpenCode*.exe' -Recurse -ErrorAction SilentlyContinue |
+                  Select-Object -First 1
+
+              if ($found) {
+                  $targetExe = $found.FullName
+              }
+          }
+
+          if (-not $targetExe) {
+              Write-Warning 'Не удалось найти установленный OpenCode.exe для создания ярлыка.'
+          } else {
+              Write-Host "Найден исполняемый файл: $targetExe"
+
+              # --- Создать ярлык на Public Desktop (виден всем пользователям) ---
+              $publicDesktop = [Environment]::GetFolderPath('CommonDesktopDirectory')
+              $shortcutPath = Join-Path $publicDesktop 'OpenCode.lnk'
+
+              $shell = New-Object -ComObject WScript.Shell
+              $shortcut = $shell.CreateShortcut($shortcutPath)
+              $shortcut.TargetPath = $targetExe
+              $shortcut.WorkingDirectory = Split-Path $targetExe
+              $shortcut.IconLocation = $targetExe
+              $shortcut.Description = 'OpenCode Desktop'
+              $shortcut.Save()
+
+              Write-Host "Ярлык создан: $shortcutPath"
+          }
+
       - name: Install Tailscale
         shell: pwsh
         run: |

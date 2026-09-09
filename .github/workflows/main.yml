@@ -9,6 +9,32 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: Generate unique PC name
+        shell: pwsh
+        run: |
+          $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+          $randomPart = -join (1..8 | ForEach-Object {
+              $chars[(Get-Random -Maximum $chars.Length)]
+          })
+
+          $pcName = "RDP-$randomPart"
+
+          Write-Host "Generated PC name: $pcName"
+
+          "PC_NAME=$pcName" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
+            -Append
+
+      - name: Rename Windows computer
+        shell: pwsh
+        run: |
+          Rename-Computer `
+            -NewName "$env:PC_NAME" `
+            -Force
+
+          Write-Host "Windows computer renamed to: $env:PC_NAME"
+
       - name: Configure RDP
         shell: pwsh
         run: |
@@ -76,11 +102,6 @@ jobs:
             -Encoding utf8 `
             -Append
 
-          "RDP_PASSWORD=$password" | Out-File `
-            -FilePath $env:GITHUB_ENV `
-            -Encoding utf8 `
-            -Append
-
       - name: Install Tailscale
         shell: pwsh
         run: |
@@ -113,7 +134,7 @@ jobs:
 
           & $tailscale up `
             --authkey="$env:TAILSCALE_AUTH_KEY" `
-            --hostname="gh-runner-$env:GITHUB_RUN_ID"
+            --hostname="$env:PC_NAME"
 
           if ($LASTEXITCODE -ne 0) {
               throw 'Tailscale connection failed.'
@@ -143,6 +164,7 @@ jobs:
       - name: Verify RDP
         shell: pwsh
         run: |
+          Write-Host "PC name: $env:PC_NAME"
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
           $testResult = Test-NetConnection `
@@ -159,11 +181,14 @@ jobs:
       - name: Maintain Connection
         shell: pwsh
         run: |
+          Write-Host ''
           Write-Host '=== RDP ACCESS ==='
+          Write-Host "PC Name:  $env:PC_NAME"
           Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host 'Username: RDP'
           Write-Host 'Password: stored in GitHub Actions environment'
           Write-Host '=================='
+          Write-Host ''
 
           while ($true) {
               Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active"

@@ -186,7 +186,7 @@ jobs:
           Write-Host "PC Name:  $env:PC_NAME"
           Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host 'Username: RDP'
-          Write-Host 'Password: stored in GitHub Actions environment'
+          Write-Host "Password: $env:RDP_PASSWORD"
           Write-Host '=================='
           Write-Host ''
 

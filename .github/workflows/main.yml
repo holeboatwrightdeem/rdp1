@@ -1,3 +1,4 @@
+```yaml
 name: RDP
 
 on:
@@ -9,6 +10,19 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: Generate Unique PC Name
+        shell: pwsh
+        run: |
+          $randomNumber = Get-Random -Minimum 0 -Maximum 100000001
+          $pcName = "Test-Machine$randomNumber"
+
+          "PCNAME=$pcName" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
+            -Append
+
+          Write-Host "Generated PC name: $pcName"
+
       - name: Configure Core RDP Settings
         shell: pwsh
         run: |
@@ -80,41 +94,6 @@ jobs:
             -Encoding utf8 `
             -Append
 
-      - name: Install OpenCode Desktop
-        shell: pwsh
-        run: |
-          $url = 'https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-desktop-win-x64.exe'
-          $installer = Join-Path $env:TEMP 'opencode-desktop-win-x64.exe'
-          $expectedHash = '091C6A1678002469EC9912130E4AC346851D318E46D3F2F565C3AC09AB581F87'
-
-          Invoke-WebRequest `
-            -Uri $url `
-            -OutFile $installer `
-            -UseBasicParsing
-
-          $actualHash = (Get-FileHash `
-            -Path $installer `
-            -Algorithm SHA256).Hash
-
-          if ($actualHash -ne $expectedHash) {
-              Remove-Item $installer -Force
-              throw "OpenCode checksum mismatch. Expected: $expectedHash, received: $actualHash"
-          }
-
-          $process = Start-Process `
-            -FilePath $installer `
-            -ArgumentList '/S', '/allusers' `
-            -Wait `
-            -PassThru
-
-          if ($process.ExitCode -ne 0) {
-              throw "OpenCode installation failed with exit code $($process.ExitCode)"
-          }
-
-          Remove-Item $installer -Force
-
-          Write-Host 'OpenCode Desktop installed successfully.'
-
       - name: Install Tailscale
         shell: pwsh
         run: |
@@ -145,9 +124,11 @@ jobs:
         run: |
           $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
+          Write-Host "Connecting Tailscale with hostname: $env:PCNAME"
+
           & $tailscale up `
             --authkey="$env:TAILSCALE_AUTH_KEY" `
-            --hostname="gh-runner-$env:GITHUB_RUN_ID"
+            --hostname="$env:PCNAME"
 
           if ($LASTEXITCODE -ne 0) {
               throw 'Tailscale connection failed.'
@@ -177,6 +158,7 @@ jobs:
       - name: Verify RDP Accessibility
         shell: pwsh
         run: |
+          Write-Host "PC Name: $env:PCNAME"
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
           $testResult = Test-NetConnection `
@@ -195,6 +177,7 @@ jobs:
         run: |
           Write-Host ''
           Write-Host '=== RDP ACCESS ==='
+          Write-Host "PC Name:  $env:PCNAME"
           Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host 'Username: RDP'
           Write-Host "Password: $env:RDP_PASSWORD"
@@ -202,6 +185,7 @@ jobs:
           Write-Host ''
 
           while ($true) {
-              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active"
+              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active - $env:PCNAME"
               Start-Sleep -Seconds 300
           }
+```

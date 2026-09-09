@@ -1,7 +1,7 @@
 name: RDP
 
 on:
-  workflow\_dispatch:
+  workflow_dispatch:
 
 jobs:
   secure-rdp:
@@ -9,47 +9,47 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      \- name: Configure Core RDP Settings
+      - name: Configure RDP
         shell: pwsh
         run: |
-          Set-ItemProperty \`
-            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' \`
-            -Name 'fDenyTSConnections' \`
-            -Value 0 \`
+          Set-ItemProperty `
+            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name 'fDenyTSConnections' `
+            -Value 0 `
             -Force
 
-          Set-ItemProperty \`
-            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' \`
-            -Name 'UserAuthentication' \`
-            -Value 0 \`
+          Set-ItemProperty `
+            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name 'UserAuthentication' `
+            -Value 1 `
             -Force
 
-          Set-ItemProperty \`
-            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' \`
-            -Name 'SecurityLayer' \`
-            -Value 0 \`
+          Set-ItemProperty `
+            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name 'SecurityLayer' `
+            -Value 1 `
             -Force
 
           netsh advfirewall firewall delete rule name="RDP-Tailscale"
 
-          netsh advfirewall firewall add rule \`
-            name="RDP-Tailscale" \`
-            dir=in \`
-            action=allow \`
-            protocol=TCP \`
-            localport=3389 \`
+          netsh advfirewall firewall add rule `
+            name="RDP-Tailscale" `
+            dir=in `
+            action=allow `
+            protocol=TCP `
+            localport=3389 `
             remoteip=100.64.0.0/10
 
           Restart-Service -Name TermService -Force
 
-      \- name: Create RDP User
+      - name: Create RDP User
         shell: pwsh
         run: |
           $charSet = @{
-              Upper   = [char[]]\(65..90)
-              Lower   = [char[]]\(97..122)
-              Number  = [char[]]\(48..57)
-              Special = [char[]]'!@#$%&\*+-=?'
+              Upper   = [char[]](65..90)
+              Lower   = [char[]](97..122)
+              Number  = [char[]](48..57)
+              Special = [char[]]'!@#$%&*+-=?'
           }
 
           $rawPassword = @()
@@ -61,75 +61,41 @@ jobs:
           $password = -join ($rawPassword | Sort-Object { Get-Random })
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
 
-          New-LocalUser \`
-            -Name 'RDP' \`
-            -Password $securePass \`
-            -AccountNeverExpires \`
+          New-LocalUser `
+            -Name 'RDP' `
+            -Password $securePass `
+            -AccountNeverExpires `
             -PasswordNeverExpires
 
-          Add-LocalGroupMember \`
-            -Group 'Administrators' \`
+          Add-LocalGroupMember `
+            -Group 'Remote Desktop Users' `
             -Member 'RDP'
 
-          Add-LocalGroupMember \`
-            -Group 'Remote Desktop Users' \`
-            -Member 'RDP'
-
-          "RDP\_PASSWORD=$password" | Out-File \`
-            -FilePath $env\:GITHUB\_ENV \`
-            -Encoding utf8 \`
+          "RDP_PASSWORD=$password" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
             -Append
 
-      \- name: Install OpenCode Desktop
+          "RDP_PASSWORD=$password" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
+            -Append
+
+      - name: Install Tailscale
         shell: pwsh
         run: |
-          $url = '[https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-desktop-win-x64.exe](https://github.com/anomalyco/opencode/releases/download/v1.18.15/opencode-desktop-win-x64.exe)'
-          $installer = Join-Path $env\:TEMP 'opencode-desktop-win-x64.exe'
-          $expectedHash = '091C6A1678002469EC9912130E4AC346851D318E46D3F2F565C3AC09AB581F87'
+          $tsUrl = 'https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi'
+          $installerPath = Join-Path $env:TEMP 'tailscale.msi'
 
-          Invoke-WebRequest \`
-            -Uri $url \`
-            -OutFile $installer \`
+          Invoke-WebRequest `
+            -Uri $tsUrl `
+            -OutFile $installerPath `
             -UseBasicParsing
 
-          $actualHash = (Get-FileHash \`
-            -Path $installer \`
-            -Algorithm SHA256).Hash
-
-          if ($actualHash -ne $expectedHash) {
-              Remove-Item $installer -Force
-              throw "OpenCode checksum mismatch. Expected: $expectedHash, received: $actualHash"
-          }
-
-          $process = Start-Process \`
-            -FilePath $installer \`
-            -ArgumentList '/S', '/allusers' \`
-            -Wait \`
-            -PassThru
-
-          if ($process.ExitCode -ne 0) {
-              throw "OpenCode installation failed with exit code $($process.ExitCode)"
-          }
-
-          Remove-Item $installer -Force
-
-          Write-Host 'OpenCode Desktop installed successfully.'
-
-      \- name: Install Tailscale
-        shell: pwsh
-        run: |
-          $tsUrl = '[https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi](https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi)'
-          $installerPath = Join-Path $env\:TEMP 'tailscale.msi'
-
-          Invoke-WebRequest \`
-            -Uri $tsUrl \`
-            -OutFile $installerPath \`
-            -UseBasicParsing
-
-          $process = Start-Process \`
-            -FilePath 'msiexec.exe' \`
-            -ArgumentList '/i', "\`"$installerPath\`"", '/quiet', '/norestart' \`
-            -Wait \`
+          $process = Start-Process `
+            -FilePath 'msiexec.exe' `
+            -ArgumentList '/i', "`"$installerPath`"", '/quiet', '/norestart' `
+            -Wait `
             -PassThru
 
           if ($process.ExitCode -ne 0) {
@@ -138,16 +104,16 @@ jobs:
 
           Remove-Item $installerPath -Force
 
-      \- name: Establish Tailscale Connection
+      - name: Establish Tailscale Connection
         shell: pwsh
         env:
-          TAILSCALE\_AUTH\_KEY: ${{ secrets.TAILSCALE\_AUTH\_KEY }}
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
-          $tailscale = "$env\:ProgramFiles\Tailscale\tailscale.exe"
+          $tailscale = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
-          & $tailscale up \`
-            \--authkey="$env\:TAILSCALE\_AUTH\_KEY" \`
-            \--hostname="gh-runner-$env\:GITHUB\_RUN\_ID"
+          & $tailscale up `
+            --authkey="$env:TAILSCALE_AUTH_KEY" `
+            --hostname="gh-runner-$env:GITHUB_RUN_ID"
 
           if ($LASTEXITCODE -ne 0) {
               throw 'Tailscale connection failed.'
@@ -169,19 +135,19 @@ jobs:
               throw 'Tailscale IP was not assigned.'
           }
 
-          "TAILSCALE\_IP=$tsIP" | Out-File \`
-            -FilePath $env\:GITHUB\_ENV \`
-            -Encoding utf8 \`
+          "TAILSCALE_IP=$tsIP" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
             -Append
 
-      \- name: Verify RDP Accessibility
+      - name: Verify RDP
         shell: pwsh
         run: |
-          Write-Host "Tailscale IP: $env\:TAILSCALE\_IP"
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
 
-          $testResult = Test-NetConnection \`
-            -ComputerName $env\:TAILSCALE\_IP \`
-            -Port 3389 \`
+          $testResult = Test-NetConnection `
+            -ComputerName $env:TAILSCALE_IP `
+            -Port 3389 `
             -WarningAction SilentlyContinue
 
           if (-not $testResult.TcpTestSucceeded) {
@@ -190,18 +156,16 @@ jobs:
 
           Write-Host 'TCP connectivity successful.'
 
-      \- name: Maintain Connection
+      - name: Maintain Connection
         shell: pwsh
         run: |
-          Write-Host ''
           Write-Host '=== RDP ACCESS ==='
-          Write-Host "Address:  $env\:TAILSCALE\_IP"
+          Write-Host "Address:  $env:TAILSCALE_IP"
           Write-Host 'Username: RDP'
-          Write-Host "Password: $env\:RDP\_PASSWORD"
+          Write-Host 'Password: stored in GitHub Actions environment'
           Write-Host '=================='
-          Write-Host ''
 
           while ($true) {
-              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH\:mm\:ss')] RDP Active"
+              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] RDP Active"
               Start-Sleep -Seconds 300
           }
